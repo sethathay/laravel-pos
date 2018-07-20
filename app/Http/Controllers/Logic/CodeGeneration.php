@@ -4,62 +4,51 @@ use DB;
 
 class CodeGeneration {
 
+    private $datetime;
+
+    public function __construct(IDateTime $dt = null){
+        $this->datetime = $dt ?: new ClsDateTime();
+    }
+
     public static function newCode($table, $field, $length, $prefix){
         $obj = new CodeGeneration();
         return $obj->create($table, $field, $length, $prefix);
     }
 
     public function create($table, $field, $length, $prefix){
-        $sqlArr = array(
+        $tableAndField = array(
             'table' => $table,
             'fields' => array('id', $field)
         );
-        $code = $this->getLastCode($sqlArr, false);
-        $currentYear = date('y');
-        if(strlen($code) > $length){
-            list($year, $id) = preg_split('/'.$prefix.'/' , $code);
-            $numId = (int) $id;
-            $numYear = (int) $year;
-            if ($numId == $this->get9NumberByLen($len)) {
-                $numId = 0;
-                $currentYear = $numYear + 1;
-            }
-            return $currentYear . $prefix . $this->getIdString($numId + 1, $len);
+        //Get last code from table inside of database
+        $lastCode = $this->getLastCode($tableAndField, $length, $prefix, false);
+        $currentYear = $this->datetime->getCurrentYear();
+        list($year, $number) = preg_split('/'. $prefix .'/' , $lastCode);
+        //Year of last code equal current year
+        if((int) $year == $currentYear){
+            return $this->formatOrderNumber($currentYear, $prefix, (int) $number + 1, $length, '0');
         }else{
-            return $currentYear . $prefix . $this->getIDString($code, $length);
+            return $this->formatOrderNumber(($year + 1), $prefix, 1, $length, '0');
         }
     }
-
-    private function get9NumberByLen($len){
-        $numStr = '';
-        for ($i = 1; $i <= $len; $i++) {
-            $numStr = $numStr . '9';
-        }
-        return (int) $numStr;
+    //Format order number based on length and char format
+    //Example: number = 1, length = 6 => Result: 000001
+    private function formatOrderNumber($year, $prefix, $number, $length, $charFormat){
+        return $year . $prefix . str_pad($number, $length, $charFormat, STR_PAD_LEFT);
     }
-
-    private function getIDString($numID, $len){
-        $str = '';
-        for($i=0; $i<=$len-strlen($numID);$i++){
-            $str = $str . '0';
-        }
-        return $str . $numID;
-    }
-
-    private function getLastCode($sqlArr, $sort = false){
-
-        $tableName = $sqlArr['table'];
-        $fieldID = $sqlArr['fields'][0];
-        $fieldCode = $sqlArr['fields'][1];
+    //Function to get last code from table in database
+    private function getLastCode($tableAndField, $length, $prefix, $sort = false){
+        $tableName = $tableAndField['table'];
+        $fieldID = $tableAndField['fields'][0];
+        $fieldCode = $tableAndField['fields'][1];
         $sortField = $fieldID;
         if($sort) $sortField = $fieldCode;
         $sqlString = 'SELECT ' . $fieldID . ',' . $fieldCode . ' FROM ' . $tableName . ' order by ' . $sortField . ' DESC LIMIT 0 ,1';
-        $results = DB::select( DB::raw($sqlString) );
-        $code = 1;
+        $results = DB::select(DB::raw($sqlString));
         if (count($results) > 0) {
-            $code = $results[0]->$fieldCode;
+            return $results[0]->$fieldCode;
         }
-        return $code;
+        return $this->formatOrderNumber($this->datetime->getCurrentYear(), $prefix, 0, $length, '0');
     }
 
 }
